@@ -347,14 +347,4 @@ côté driver. Cette approche convient au volume pédagogique du projet.
 Un volume plus important nécessiterait des écritures plus adaptées
 et une évaluation de la mémoire utilisée par les agrégations distinctes.
 
-## 16. Analyse batch et optimisation
 
-À compléter avec la documentation de la partie batch.
-
-## 17. Analyse de sentiments
-
-À compléter avec la documentation de la partie machine learning.
-
-## 18. Visualisation
-
-À compléter avec la documentation des graphiques et des résultats.
