@@ -12,3 +12,6 @@ metastore_db/
 derby.log
 
 *.log
+
+checkpoints/
+.ipynb_checkpoints/
