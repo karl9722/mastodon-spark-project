@@ -504,3 +504,147 @@ Puis exécuter les cellules dans l'ordre après avoir vérifié que PostgreSQL
 est accessible et que les données nécessaires à l'entraînement sont
 disponibles.
 
+
+## 18. Visualisation et synthèse des résultats
+
+La partie visualisation est réalisée dans **`notebooks/04_visualisation.ipynb`**. Elle exploite les données produites par les différentes étapes du projet afin de proposer une synthèse graphique de l'activité Mastodon, des traitements batch et des résultats du modèle de sentiment.
+
+Le principe général est :
+
+```text
+PostgreSQL
+    ↓
+Pandas
+    ↓
+Matplotlib
+    ↓
+Visualisations et interprétation
+
+Les données utilisées proviennent principalement des tables :
+- toots pour les publications collectées ;
+- streaming_posts_per_hour pour l'activité horaire calculée en streaming ;
+- toot_sentiments pour les prédictions issues du modèle de Machine Learning.
+
+### Analyse de l'activité
+
+Plusieurs visualisations permettent d'explorer l'activité des publications collectées :
+- le nombre de publications par fenêtre horaire ;
+- les utilisateurs les plus actifs ;
+- les hashtags les plus fréquents hors hashtags directement utilisés pour la collecte ;
+- la relation entre le nombre de publications d'un utilisateur et la longueur moyenne de ses contenus.
+
+L'analyse de la longueur des publications utilise un nuage de points afin de comparer l'activité des utilisateurs et la taille moyenne de leurs messages.
+Un coefficient de corrélation est également calculé afin de compléter l'analyse graphique. La comparaison avec et sans utilisateur atypique permet d'illustrer l'influence qu'un outlier peut avoir sur une mesure statistique.
+
+### Visualisation des sentiments
+
+Les prédictions enregistrées dans toot_sentiments sont utilisées pour analyser la répartition des sentiments des publications en anglais.
+
+Trois catégories sont affichées :
+- **positive** ;
+- **negative** ;
+- **uncertain**.
+
+La catégorie **uncertain** ne correspond pas à une troisième classe apprise par le modèle. Elle représente une zone de confiance intermédiaire définie à partir de la probabilité produite par la régression logistique.
+
+Les visualisations réalisées comprennent :
+- un graphique en secteurs présentant la répartition globale des sentiments ;
+- un graphique en barres horizontales empilées à 100 % comparant le profil de sentiment des utilisateurs les plus actifs ;
+- une heatmap représentant l'évolution de la répartition des sentiments selon les heures de collecte.
+
+Pour les analyses par utilisateur, le nombre de publications est également conservé afin d'éviter de comparer de la même manière un profil calculé sur quelques messages et un profil reposant sur un volume plus important.
+
+### Mise à jour des prédictions
+
+Lorsque de nouvelles publications sont collectées après la première application du modèle, le modèle **Logistic Regression** sauvegardé peut être rechargé afin de prédire uniquement les publications encore absentes de **toot_sentiments**.
+Cette approche évite de réentraîner le modèle sur **Sentiment140** et permet une utilisation incrémentale du modèle :
+
+Nouvelles publications Mastodon
+            ↓
+Sélection des toots non prédits
+            ↓
+Nettoyage du texte
+            ↓
+Modèle ML sauvegardé
+            ↓
+Nouvelles prédictions
+            ↓
+toot_sentiments
+            ↓
+Visualisations
+
+### Interprétation et limites
+
+Les visualisations permettent d'identifier des tendances dans les données collectées, mais les résultats doivent être interprétés avec prudence.
+
+Le volume de publications dépend directement de la durée et des périodes de collecte. Certaines fenêtres horaires peuvent contenir très peu de publications et ne sont donc pas représentatives d'une tendance générale.
+
+L'analyse de sentiment présente également une limite importante : le modèle a été entraîné sur **Sentiment140**, alors que les publications Mastodon collectées autour de l'intelligence artificielle sont souvent techniques, informatives ou issues de flux d'actualité.
+
+Une prédiction positive ou négative ne signifie donc pas nécessairement que l'auteur exprime explicitement une opinion positive ou négative.
+
+### Exécution
+
+Avec PostgreSQL accessible et les traitements précédents terminés, ouvrir dans JupyterLab :
+
+```text
+notebooks/04_visualisation.ipynb
+```
+
+Puis exécuter le notebook dans l'ordre. Les visualisations sont générées et commentées au fil des cellules.
+
+Pour obtenir une analyse cohérente, il est recommandé de terminer la collecte streaming et de mettre à jour les prédictions de sentiment avant d'exécuter la partie consacrée aux visualisations ML.
+
+# 19. Synthèse du pipeline
+
+Le projet met en œuvre un pipeline complet allant de la collecte en temps réel de publications Mastodon à l'analyse de sentiment et à la visualisation des résultats, en passant par le traitement distribué et le stockage dans PostgreSQL.
+
+### Vue d'ensemble
+
+```mermaid
+graph LR
+    subgraph Collecte
+        A[Mastodon API] --> B[Kafka Streaming]
+    end
+    
+    subgraph Traitement_Streaming
+        B --> C[Spark Streaming]
+        C --> D[Kafka Consumer]
+        C --> E[ETL + PostgreSQL]
+        D --> F[toot_sentiments ML]
+    end
+    
+    subgraph Traitement_Batch
+        G[PostgreSQL] --> H[Spark Batch]
+        H --> I[Pandas / Matplotlib]
+    end
+    
+    subgraph Machine_Learning
+        J[Sentiment140] --> K[Spark MLlib]
+        K --> L[Modèles ML]
+        M[Kafka Consumer] --> F
+        F --> G
+    end
+    
+    subgraph Visualisation
+        G --> N[PostgreSQL]
+        F --> N
+        I --> O[Visualisations]
+    end
+```
+
+### Composants principaux
+
+1. **Collecte** : extraction des publications Mastodon en temps réel via l'API et publication dans Kafka.
+2. **Streaming** : traitement distribué des messages via Spark Streaming, enrichissement et enregistrement dans PostgreSQL.
+3. **Batch** : analyse de données historiques stockées dans PostgreSQL, mise à l'échelle et visualisation.
+4. **Machine Learning** : entraînement d'un modèle de sentiment sur **Sentiment140** et application aux publications Mastodon.
+5. **Visualisation** : analyse des tendances d'activité et des résultats de sentiment via des graphiques et tableaux.
+
+### Technologies utilisées
+
+- **Spark** : traitement batch et streaming, MLlib
+- **Kafka** : messagerie asynchrone
+- **PostgreSQL** : persistance des données
+- **Docker** : orchestration des services
+- **Pandas / Matplotlib** : analyse et visualisation
