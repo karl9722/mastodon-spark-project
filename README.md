@@ -6,9 +6,10 @@ Le projet combine la collecte de publications Mastodon, le traitement
 en streaming, l’analyse historique, l’analyse de sentiments et la
 visualisation des résultats.
 
-Ce document présente la partie **ingestion et traitement en streaming**.
-Les parties batch, machine learning et visualisation seront documentées
-dans leurs sections respectives.
+Ce document présente les parties **ingestion et traitement en streaming**,
+**analyse batch et optimisation Spark**, ainsi que **Machine Learning pour
+l'analyse de sentiment**. La partie visualisation sera documentée dans sa
+section dédiée.
 
 ## 1. Architecture du streaming
 
@@ -347,4 +348,159 @@ côté driver. Cette approche convient au volume pédagogique du projet.
 Un volume plus important nécessiterait des écritures plus adaptées
 et une évaluation de la mémoire utilisée par les agrégations distinctes.
 
+## 16. Analyse batch et optimisation Spark
+
+La partie batch est réalisée dans **`notebooks/02_batch.ipynb`**.
+Elle exploite les publications Mastodon historiques enregistrées dans
+PostgreSQL par le pipeline de streaming.
+
+Le notebook charge la table `toots` dans un DataFrame Spark via JDBC :
+
+```text
+PostgreSQL → JDBC → Spark DataFrame → analyses batch
+```
+
+Les traitements réalisés comprennent :
+
+- le comptage de l'activité par utilisateur ;
+- l'identification des utilisateurs ayant publié plus d'un seuil configurable
+  de toots ;
+- le nombre de publications par jour ;
+- l'extraction et le comptage des hashtags avec `explode()` ;
+- l'identification des hashtags les plus fréquents ;
+- le calcul de la longueur moyenne des publications ;
+- des statistiques complémentaires par utilisateur ;
+- la reproduction de plusieurs analyses avec **Spark SQL** ;
+- l'utilisation de `explain()` pour inspecter les plans d'exécution.
+
+Le notebook utilise directement les données Mastodon réelles stockées dans
+PostgreSQL. Dans l'environnement Docker, la connexion JDBC utilise le service
+interne :
+
+```text
+jdbc:postgresql://postgres:5432/mastodon
+```
+
+### Optimisations testées
+
+Plusieurs stratégies Spark sont comparées sur le même workload :
+
+- exécution sans cache ;
+- mise en cache avec `cache()` et matérialisation ;
+- redistribution des données avec `repartition()` ;
+- réduction du nombre de partitions avec `coalesce()`.
+
+Les temps d'exécution sont mesurés afin de comparer les différentes
+configurations. Les résultats peuvent varier selon le volume disponible :
+sur un petit jeu de données, le coût des shuffles et de la gestion des
+partitions peut être supérieur au gain attendu.
+
+La **Spark UI** permet de compléter cette analyse en observant les jobs,
+stages, tâches, shuffles et données mises en cache. Lorsque le notebook
+streaming utilise déjà le port `4040`, l'application batch peut être
+accessible sur `4041`.
+
+### Exécution
+
+Avec les services Docker déjà démarrés, ouvrir dans JupyterLab :
+
+```text
+notebooks/02_batch.ipynb
+```
+
+Puis exécuter le notebook dans l'ordre. La collecte streaming peut continuer
+en parallèle : le notebook batch lit un instantané des données disponibles
+dans PostgreSQL au moment du chargement.
+
+---
+
+## 17. Analyse de sentiment avec Spark MLlib
+
+La partie Machine Learning est réalisée dans **`notebooks/03_ml.ipynb`**.
+L'objectif est d'entraîner un modèle de classification de sentiment à partir
+du jeu de données **Sentiment140**, puis d'appliquer le modèle retenu aux
+publications Mastodon collectées par le projet.
+
+Le pipeline général est :
+
+```text
+Sentiment140
+→ nettoyage du texte
+→ tokenisation
+→ suppression des stop words
+→ CountVectorizer
+→ IDF / TF-IDF
+→ entraînement et évaluation
+→ prédiction des toots Mastodon
+→ PostgreSQL
+```
+
+### Préparation des données
+
+Le nettoyage est appliqué de manière cohérente aux données Sentiment140 et
+aux publications Mastodon. Il comprend notamment :
+
+- le passage en minuscules ;
+- la suppression des URL et mentions ;
+- la suppression de la ponctuation et des chiffres ;
+- la normalisation des espaces ;
+- la conservation de négations importantes pour le sentiment.
+
+Le texte est ensuite tokenisé avec `RegexTokenizer`. Les mots vides sont
+retirés avec `StopWordsRemover`, tout en conservant certaines négations
+comme `no`, `not` et `nor`.
+
+Sentiment140 contient **1 600 000 publications** dans le notebook. Les données
+sont séparées de manière reproductible avec `seed=42` :
+
+- **80 %** pour l'entraînement ;
+- **20 %** pour le test.
+
+### Modèles comparés
+
+Deux modèles Spark MLlib sont entraînés et comparés :
+
+- **Logistic Regression** ;
+- **Naive Bayes multinomial**.
+
+La représentation numérique des textes repose sur `CountVectorizer` puis
+`IDF`, afin d'obtenir des caractéristiques de type TF-IDF.
+
+Le meilleur modèle est ensuite appliqué aux publications Mastodon en anglais
+présentes dans PostgreSQL.
+
+Comme l'entraînement repose sur deux classes principales, **positive** et
+**négative**, le notebook ajoute également une zone d'incertitude pour les
+prédictions dont la probabilité est trop proche du seuil de décision.
+
+### Stockage des prédictions
+
+Les résultats de l'analyse de sentiment appliquée aux publications Mastodon
+sont enregistrés dans PostgreSQL, notamment dans la table :
+
+```text
+toot_sentiments
+```
+
+Cette étape relie la partie Machine Learning au reste du pipeline :
+
+```text
+Mastodon → Kafka → Spark Streaming → PostgreSQL
+                                  ↓
+                         Spark MLlib
+                                  ↓
+                         toot_sentiments
+```
+
+### Exécution
+
+Ouvrir dans JupyterLab :
+
+```text
+notebooks/03_ml.ipynb
+```
+
+Puis exécuter les cellules dans l'ordre après avoir vérifié que PostgreSQL
+est accessible et que les données nécessaires à l'entraînement sont
+disponibles.
 
