@@ -519,6 +519,7 @@ Pandas
 Matplotlib
     ↓
 Visualisations et interprétation
+```
 
 Les données utilisées proviennent principalement des tables :
 - toots pour les publications collectées ;
