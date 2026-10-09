@@ -560,6 +560,7 @@ Pour les analyses par utilisateur, le nombre de publications est également cons
 Lorsque de nouvelles publications sont collectées après la première application du modèle, le modèle **Logistic Regression** sauvegardé peut être rechargé afin de prédire uniquement les publications encore absentes de **toot_sentiments**.
 Cette approche évite de réentraîner le modèle sur **Sentiment140** et permet une utilisation incrémentale du modèle :
 
+```text
 Nouvelles publications Mastodon
             ↓
 Sélection des toots non prédits
@@ -573,6 +574,7 @@ Nouvelles prédictions
 toot_sentiments
             ↓
 Visualisations
+```
 
 ### Interprétation et limites
 
@@ -601,38 +603,6 @@ Pour obtenir une analyse cohérente, il est recommandé de terminer la collecte 
 Le projet met en œuvre un pipeline complet allant de la collecte en temps réel de publications Mastodon à l'analyse de sentiment et à la visualisation des résultats, en passant par le traitement distribué et le stockage dans PostgreSQL.
 
 ### Vue d'ensemble
-
-```mermaid
-graph LR
-    subgraph Collecte
-        A[Mastodon API] --> B[Kafka Streaming]
-    end
-    
-    subgraph Traitement_Streaming
-        B --> C[Spark Streaming]
-        C --> D[Kafka Consumer]
-        C --> E[ETL + PostgreSQL]
-        D --> F[toot_sentiments ML]
-    end
-    
-    subgraph Traitement_Batch
-        G[PostgreSQL] --> H[Spark Batch]
-        H --> I[Pandas / Matplotlib]
-    end
-    
-    subgraph Machine_Learning
-        J[Sentiment140] --> K[Spark MLlib]
-        K --> L[Modèles ML]
-        M[Kafka Consumer] --> F
-        F --> G
-    end
-    
-    subgraph Visualisation
-        G --> N[PostgreSQL]
-        F --> N
-        I --> O[Visualisations]
-    end
-```
 
 ### Composants principaux
 
